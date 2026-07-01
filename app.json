@@ -1,0 +1,75 @@
+{
+  "expo": {
+    "name": "Mangrow",
+    "slug": "Mangrow_Project",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/app_icon_centered.png",
+    "scheme": "mangrowproject",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "icon": "./assets/app_icon_centered.png"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/app_logo_adaptive_foreground.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.mangrow_project.mangrow_project",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "output": "static",
+      "favicon": "./assets/app_icon_centered.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#ffffff",
+          "image": "./assets/app_logo_splash.png",
+          "imageWidth": 200,
+          "android": {
+            "image": "./assets/app_logo_splash.png",
+            "imageWidth": 200
+          },
+          "ios": {
+            "image": "./assets/app_logo_splash.png",
+            "imageWidth": 200
+          }
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/app_logo_adaptive_foreground.png",
+          "color": "#ffffff"
+        }
+      ],
+      "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Mangrow to access your camera to capture mangrove photos.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-web-browser"
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+         "origin": "mangrowproject://"
+      },
+      "eas": {
+        "projectId": "db64d9a8-2e78-482c-8594-cae137025d9e"
+      }
+    },
+    "owner": "mangrow_project"
+  }
+}
