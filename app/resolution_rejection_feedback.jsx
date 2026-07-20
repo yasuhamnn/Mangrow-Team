@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   StyleSheet,
   Text,
@@ -15,6 +15,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import BottomNav from './components/BottomNav'
 import { getResolutionRejectionFeedback } from './utils/volunteerResolutionRejectionBackend'
 import { useBottomNavMetrics } from './utils/shared/screenLayout'
+import { usePullToRefresh } from './utils/shared/usePullToRefresh'
+import ScreenHeader, { HeaderBackButton, HeaderSideSpacer, screenLayoutStyles } from './components/ScreenHeader'
 
 export default function ResolutionRejectionFeedback() {
   const router = useRouter()
@@ -23,25 +25,27 @@ export default function ResolutionRejectionFeedback() {
   const [feedback, setFeedback] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let mounted = true
-
-    const load = async () => {
-      try {
-        setLoading(true)
-        const data = await getResolutionRejectionFeedback(reportId)
-        if (mounted) setFeedback(data)
-      } catch (e) {
+  const loadFeedback = useCallback(async ({ silent = false } = {}) => {
+    if (!reportId) return
+    try {
+      if (!silent) setLoading(true)
+      const data = await getResolutionRejectionFeedback(reportId)
+      setFeedback(data)
+    } catch (e) {
+      if (!silent) {
         Alert.alert('Error', e?.message || 'Failed to load resolution rejection feedback.')
-        if (mounted) router.back()
-      } finally {
-        if (mounted) setLoading(false)
+        router.back()
       }
+    } finally {
+      if (!silent) setLoading(false)
     }
-
-    if (reportId) load()
-    return () => { mounted = false }
   }, [reportId, router])
+
+  const { refreshControl } = usePullToRefresh(() => loadFeedback({ silent: true }))
+
+  useEffect(() => {
+    loadFeedback()
+  }, [loadFeedback])
 
   if (loading) {
     return (
@@ -55,15 +59,18 @@ export default function ResolutionRejectionFeedback() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: scrollPadding }]}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={18} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Resolution Feedback</Text>
-          <View style={{ width: 38 }} />
-        </View>
+      <ScreenHeader
+        title="Resolution Feedback"
+        centered
+        leading={<HeaderBackButton onPress={() => router.back()} />}
+        right={<HeaderSideSpacer />}
+      />
 
+      <ScrollView
+        style={screenLayoutStyles.scrollView}
+        contentContainerStyle={[screenLayoutStyles.scrollContent, { paddingBottom: scrollPadding }]}
+        refreshControl={refreshControl}
+      >
         <View style={styles.alertCard}>
           <Ionicons name="close-circle" size={28} color="rgb(255, 77, 79)" />
           <View style={{ flex: 1 }}>
@@ -122,26 +129,6 @@ export default function ResolutionRejectionFeedback() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'rgb(251, 252, 247)' },
-  content: { padding: 16 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  backButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontFamily: 'Montserrat_700Bold',
-    color: 'rgb(16, 32, 15)',
-  },
   alertCard: {
     flexDirection: 'row',
     gap: 12,

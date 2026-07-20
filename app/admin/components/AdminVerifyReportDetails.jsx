@@ -1,6 +1,6 @@
+import { Feather, Ionicons } from '@expo/vector-icons'
 import React, { useMemo, useState } from 'react'
-import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native'
-import { Ionicons, Feather } from '@expo/vector-icons'
+import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import ImageViewerModal from './ImageViewerModal'
 
 export default function AdminVerifyReportDetails({

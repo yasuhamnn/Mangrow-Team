@@ -16,6 +16,7 @@ import MapFullscreenModal from './components/map/MapFullscreenModal'
 import MapLayerToggles from './components/map/MapLayerToggles'
 import MapReportList from './components/map/MapReportList'
 import { useVolunteerMapScreen } from './components/map/useVolunteerMapScreen'
+import ScreenHeader, { HEADER_ICON_SIZE, HeaderIconButton, screenLayoutStyles } from './components/ScreenHeader'
 
 export default function MapScreen() {
   const { floatingBottom, scrollPadding } = useBottomNavMetrics()
@@ -33,6 +34,7 @@ export default function MapScreen() {
     setShowHealthy,
     filteredReports,
     isLoading,
+    refreshControl,
     embeddedWebViewRef,
     fullscreenWebViewRef,
     mapPanelProps,
@@ -41,47 +43,51 @@ export default function MapScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <Animated.ScrollView
-        ref={scrollRef}
-        style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}
-        showsVerticalScrollIndicator={false}
-        stickyHeaderIndices={[1]}
-        scrollEventThrottle={16}
-        scrollEnabled={!isFullscreen}
-      >
-        <View style={styles.topSection}>
-          <View style={styles.header}>
-            <Text style={styles.title}>Map</Text>
+      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <ScreenHeader
+          title="Map"
+          right={
             <Link href="/search" asChild>
-              <TouchableOpacity style={styles.searchBtn} activeOpacity={0.85}>
-                <Feather name="search" size={18} color="rgb(48, 64, 24)" />
-              </TouchableOpacity>
+              <HeaderIconButton>
+                <Feather name="search" size={HEADER_ICON_SIZE} color="rgb(48, 64, 24)" />
+              </HeaderIconButton>
             </Link>
+          }
+        />
+
+        <Animated.ScrollView
+          ref={scrollRef}
+          style={screenLayoutStyles.scrollView}
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          scrollEnabled={!isFullscreen}
+          refreshControl={refreshControl}
+        >
+          <View style={styles.topSection}>
+            <MapPanel
+              {...mapPanelProps}
+              isFullscreen={false}
+              webViewRef={embeddedWebViewRef}
+            />
+
+            <MapLayerToggles
+              showUnhealthy={showUnhealthy}
+              showHealthy={showHealthy}
+              onToggleUnhealthy={() => setShowUnhealthy((v) => !v)}
+              onToggleHealthy={() => setShowHealthy((v) => !v)}
+            />
           </View>
 
-          <MapPanel
-            {...mapPanelProps}
-            isFullscreen={false}
-            webViewRef={embeddedWebViewRef}
+          <MapReportList
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
+            filteredReports={filteredReports}
+            isLoading={isLoading}
+            scrollPadding={scrollPadding}
+            onListLayout={handleListLayout}
           />
-
-          <MapLayerToggles
-            showUnhealthy={showUnhealthy}
-            showHealthy={showHealthy}
-            onToggleUnhealthy={() => setShowUnhealthy((v) => !v)}
-            onToggleHealthy={() => setShowHealthy((v) => !v)}
-          />
-        </View>
-
-        <MapReportList
-          activeFilter={activeFilter}
-          onFilterChange={setActiveFilter}
-          filteredReports={filteredReports}
-          isLoading={isLoading}
-          scrollPadding={scrollPadding}
-          onListLayout={handleListLayout}
-        />
-      </Animated.ScrollView>
+        </Animated.ScrollView>
+      </Animated.View>
 
       <MapFullscreenModal
         visible={isFullscreen}
@@ -103,26 +109,6 @@ const styles = StyleSheet.create({
   },
   topSection: {
     paddingHorizontal: 14,
-    paddingTop: 18,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  title: {
-    fontSize: 22,
-    fontFamily: 'Montserrat_700Bold',
-    color: 'rgb(16, 32, 15)',
-    letterSpacing: -0.3,
-  },
-  searchBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: 4,
   },
 })

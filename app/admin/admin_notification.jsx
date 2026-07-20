@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   StyleSheet,
   Text,
@@ -21,6 +21,8 @@ import {
 } from '../utils/adminNotificationBackend'
 import { getRouteFromInAppNotification } from '../utils/pushNotificationNavigation'
 import { useBottomNavMetrics } from '../utils/shared/screenLayout'
+import { usePullToRefresh } from '../utils/shared/usePullToRefresh'
+import ScreenHeader, { HeaderBackButton, screenLayoutStyles } from '../components/ScreenHeader'
 
 function formatTimeLabel(createdAt) {
   if (!createdAt) return 'just now'
@@ -47,6 +49,13 @@ export default function AdminNotification() {
   const slideAnim = useRef(new Animated.Value(10)).current
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(true)
+
+  const reloadNotifications = useCallback(async () => {
+    const data = await getAdminNotifications()
+    setNotifications(data)
+  }, [])
+
+  const { refreshControl } = usePullToRefresh(reloadNotifications)
 
   useEffect(() => {
     Animated.parallel([
@@ -178,34 +187,24 @@ export default function AdminNotification() {
           transform: [{ translateY: slideAnim }],
         }}
       >
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.content, { paddingBottom: scrollPadding }]}
-        >
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.title}>Notifications</Text>
-              {notifications.some(n => !n.is_read) && (
-                <TouchableOpacity onPress={onMarkAllRead}>
-                  <Text style={styles.markAllText}>Mark all as read</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-            <TouchableOpacity 
-              style={styles.backButton} 
-              onPress={() => router.back()}
-              activeOpacity={0.8}
-            >
-              <Ionicons
-                name="arrow-forward"
-                size={18}
-                color="rgb(16, 32, 15)"
-              />
-            </TouchableOpacity>
-          </View>
+        <ScreenHeader
+          title="Notifications"
+          subtitle={
+            notifications.some((n) => !n.is_read) ? (
+              <TouchableOpacity onPress={onMarkAllRead}>
+                <Text style={styles.markAllText}>Mark all as read</Text>
+              </TouchableOpacity>
+            ) : null
+          }
+          right={<HeaderBackButton onPress={() => router.back()} icon="arrow-forward" />}
+        />
 
-          {/* Notification List */}
+        <ScrollView
+          style={screenLayoutStyles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[screenLayoutStyles.scrollContent, { paddingBottom: scrollPadding }]}
+          refreshControl={refreshControl}
+        >
           {loading ? (
             <ActivityIndicator size="small" color="rgb(109, 170, 26)" style={{ marginTop: 20 }} />
           ) : notifications.length === 0 ? (
@@ -286,28 +285,6 @@ const styles = StyleSheet.create({
   content: {
     padding: 16,
     paddingBottom: 16,
-  },
-
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 22,
-  },
-
-  title: {
-    fontSize: 22,
-    color: 'rgb(16, 32, 15)',
-    fontFamily: 'Montserrat_700Bold',
-  },
-
-  backButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
 
   notificationCard: {

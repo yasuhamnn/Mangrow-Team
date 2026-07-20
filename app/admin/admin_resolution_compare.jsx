@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   StyleSheet,
   View,
@@ -19,6 +19,8 @@ import {
   getResolutionCompareData,
   markResolutionResolved,
 } from '../utils/admin/adminResolutionReviewBackend'
+import { usePullToRefresh } from '../utils/shared/usePullToRefresh'
+import ScreenHeader, { HeaderBackButton, HeaderSideSpacer, screenLayoutStyles } from '../components/ScreenHeader'
 
 function ImageStrip({ title, images, onPressImage }) {
   if (!images?.length) {
@@ -54,23 +56,27 @@ export default function AdminResolutionCompare() {
   const [viewerImages, setViewerImages] = useState([])
   const [viewerIndex, setViewerIndex] = useState(0)
 
-  useEffect(() => {
-    let mounted = true
-    const load = async () => {
-      try {
-        setLoading(true)
-        const result = await getResolutionCompareData(resolutionId)
-        if (mounted) setData(result)
-      } catch (e) {
+  const loadCompareData = useCallback(async ({ silent = false } = {}) => {
+    if (!resolutionId) return
+    try {
+      if (!silent) setLoading(true)
+      const result = await getResolutionCompareData(resolutionId)
+      setData(result)
+    } catch (e) {
+      if (!silent) {
         Alert.alert('Error', e?.message || 'Failed to load comparison.')
-        if (mounted) router.back()
-      } finally {
-        if (mounted) setLoading(false)
+        router.back()
       }
+    } finally {
+      if (!silent) setLoading(false)
     }
-    if (resolutionId) load()
-    return () => { mounted = false }
   }, [resolutionId, router])
+
+  const { refreshControl } = usePullToRefresh(() => loadCompareData({ silent: true }))
+
+  useEffect(() => {
+    loadCompareData()
+  }, [loadCompareData])
 
   const openViewer = (images, index) => {
     setViewerImages(images)
@@ -109,15 +115,18 @@ export default function AdminResolutionCompare() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={18} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Compare Resolution</Text>
-          <View style={{ width: 38 }} />
-        </View>
+      <ScreenHeader
+        title="Compare Resolution"
+        centered
+        leading={<HeaderBackButton onPress={() => router.back()} />}
+        right={<HeaderSideSpacer />}
+      />
 
+      <ScrollView
+        style={screenLayoutStyles.scrollView}
+        contentContainerStyle={screenLayoutStyles.scrollContent}
+        refreshControl={refreshControl}
+      >
         <View style={styles.summaryCard}>
           <Text style={styles.summaryTitle}>{data.report?.species || 'Mangrove report'}</Text>
           <AdaptiveLocationText text={data.report?.formatted_address} color="rgb(107, 114, 128)" />
@@ -169,22 +178,6 @@ export default function AdminResolutionCompare() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'rgb(251, 252, 247)' },
-  content: { padding: 16, paddingBottom: 40 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  backButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: { fontSize: 20, fontFamily: 'Montserrat_700Bold', color: 'rgb(16, 32, 15)' },
   summaryCard: {
     backgroundColor: 'rgb(255, 255, 255)',
     borderRadius: 16,

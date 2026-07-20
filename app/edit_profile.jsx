@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StyleSheet, View, Text, TouchableOpacity, TextInput, ScrollView, Alert, ActivityIndicator } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { getUserProfile, updateUserProfile } from './utils/userService'
 import LoadingOverlay from './components/LoadingOverlay'
+import { usePullToRefresh } from './utils/shared/usePullToRefresh'
+import ScreenHeader, { HeaderBackButton, screenLayoutStyles } from './components/ScreenHeader'
 
 export default function EditProfile() {
   const router = useRouter();
@@ -15,16 +17,22 @@ export default function EditProfile() {
     email: '',
   })
 
+  const loadProfile = useCallback(async () => {
+    const profile = await getUserProfile()
+    if (profile) {
+      setFormData({
+        fullName: profile.full_name || '',
+        email: profile.email || '',
+      })
+    }
+  }, [])
+
+  const { refreshControl } = usePullToRefresh(loadProfile)
+
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const profile = await getUserProfile()
-        if (profile) {
-          setFormData({
-            fullName: profile.full_name || '',
-            email: profile.email || '',
-          })
-        }
+        await loadProfile()
       } catch (error) {
         console.error('Error fetching user details:', error)
       } finally {
@@ -32,7 +40,7 @@ export default function EditProfile() {
       }
     }
     fetchUserData()
-  }, [])
+  }, [loadProfile])
 
   const handleUpdate = async () => {
     if (!formData.fullName.trim()) {
@@ -69,18 +77,17 @@ export default function EditProfile() {
     <SafeAreaView style={styles.container}>
       <LoadingOverlay visible={loading} />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Edit Profile</Text>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => router.back()}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="arrow-forward" size={18} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
-        </View>
+      <ScreenHeader
+        title="Edit Profile"
+        right={<HeaderBackButton onPress={() => router.back()} icon="arrow-forward" />}
+      />
 
+      <ScrollView
+        style={screenLayoutStyles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={screenLayoutStyles.scrollContent}
+        refreshControl={refreshControl}
+      >
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>PERSONAL DETAILS</Text>
           <View style={styles.formCard}>
@@ -119,23 +126,6 @@ export default function EditProfile() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'rgb(251, 252, 247)' },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    marginBottom: 16,
-  },
-  title: { fontSize: 22, color: 'rgb(16, 32, 15)', fontFamily: 'Montserrat_700Bold' },
-  backButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  content: { paddingHorizontal: 14, paddingTop: 18, paddingBottom: 40 },
   section: { marginBottom: 32 },
   sectionLabel: { fontSize: 11, letterSpacing: 1, color: 'rgb(110, 117, 106)', fontFamily: 'Montserrat_700Bold', marginBottom: 12, marginLeft: 4 },
   formCard: {

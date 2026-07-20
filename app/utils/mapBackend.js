@@ -10,11 +10,18 @@ function removeExistingChannel(channelName) {
   }
 }
 
-/** All submitted reports for the volunteer map and list (no limit). */
+/**
+ * Approved reports for the volunteer map and list.
+ * Only admin-approved reports are visible to everyone:
+ *   - under_review (Unresolved), resolved, recorded (healthy observations)
+ * Pending (awaiting review) and rejected reports are intentionally excluded so
+ * they are never shown to other users on the map or in the shared list.
+ */
 export async function getReportedLocationsForVolunteerMap() {
   const { data, error } = await supabase
     .from('reports')
     .select(REPORT_SELECT)
+    .in('status', ['under_review', 'resolved', 'recorded'])
     .order('created_at', { ascending: false })
 
   if (error) throw error

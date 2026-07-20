@@ -1,5 +1,4 @@
-
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Animated, Alert, Image, ActivityIndicator } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import * as ImagePicker from 'expo-image-picker'
@@ -10,6 +9,8 @@ import { useBottomNavMetrics } from './utils/shared/screenLayout'
 import { getUserProfile } from './utils/userService'
 import { signOutUser } from './utils/authService'
 import { getVolunteerProfileStats, uploadVolunteerAvatar } from './utils/profileBackend'
+import { usePullToRefresh } from './utils/shared/usePullToRefresh'
+import ScreenHeader, { HEADER_ICON_COLOR, HEADER_ICON_SIZE, HeaderIconButton, screenLayoutStyles } from './components/ScreenHeader'
 
 export default function Profile() {
   const router = useRouter()
@@ -24,6 +25,20 @@ export default function Profile() {
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [profileStats, setProfileStats] = useState({ reports: 0, resolutions: 0 })
+
+  const loadProfile = useCallback(async () => {
+    const profile = await getUserProfile()
+    if (!profile) return
+
+    setUserData(profile)
+    setUserEmail(profile.email)
+    setAvatarUrl(profile.avatar_url || null)
+
+    const stats = await getVolunteerProfileStats()
+    setProfileStats(stats)
+  }, [])
+
+  const { refreshControl } = usePullToRefresh(loadProfile)
 
   useEffect(() => {
     Animated.parallel([
@@ -43,18 +58,7 @@ export default function Profile() {
   useEffect(() => {
     const fetchUserData = async () => {
       try {
-        const profile = await getUserProfile()
-        if (!profile) {
-          setLoading(false)
-          return
-        }
-
-        setUserData(profile)
-        setUserEmail(profile.email)
-        setAvatarUrl(profile.avatar_url || null)
-
-        const stats = await getVolunteerProfileStats()
-        setProfileStats(stats)
+        await loadProfile()
       } catch (error) {
         console.error('Error fetching user data:', error)
       } finally {
@@ -63,7 +67,7 @@ export default function Profile() {
     }
 
     fetchUserData()
-  }, [])
+  }, [loadProfile])
 
   const pickImage = async () => {
     try {
@@ -124,19 +128,20 @@ export default function Profile() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: scrollPadding }]}>
+        <ScreenHeader
+          title="Profile"
+          right={
+            <HeaderIconButton onPress={handleSignOut}>
+              <Ionicons name="log-out-outline" size={HEADER_ICON_SIZE} color={HEADER_ICON_COLOR} />
+            </HeaderIconButton>
+          }
+        />
 
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.brandWrap}>
-            <Text style={styles.title}>Profile</Text>
-          </View>
-
-          <TouchableOpacity style={styles.backButton} activeOpacity={0.85} onPress={handleSignOut}>
-            <Ionicons name="log-out-outline" size={18} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
-        </View>
-
+        <ScrollView
+          style={screenLayoutStyles.scrollView}
+          contentContainerStyle={[screenLayoutStyles.scrollContent, { paddingBottom: scrollPadding }]}
+          refreshControl={refreshControl}
+        >
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
@@ -231,32 +236,6 @@ const SettingRow = ({ icon, label, last, onPress }) => (
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'rgb(251, 252, 247)' },
-  content: { paddingHorizontal: 14, paddingTop: 18 },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  brandWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 22,
-    fontFamily: 'Montserrat_700Bold',
-    color: 'rgb(16, 32, 15)',
-    letterSpacing: -0.3,
-  },
-  backButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   profileCard: {
     backgroundColor: 'rgb(255, 255, 255)',

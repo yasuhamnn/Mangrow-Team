@@ -8,9 +8,10 @@ export async function getReportById(reportId) {
     .from('reports')
     .select(`${REPORT_SELECT}, report_attachments ( id, image_url, created_at )`)
     .eq('id', reportId)
-    .single()
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) throw new Error('This report is no longer available.')
 
   const report = mapReportRow(data)
   return {

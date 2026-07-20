@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { updateUserPassword } from './utils/passwordService'
 import LoadingOverlay from './components/LoadingOverlay'
+import ScreenHeader, { HeaderBackButton, screenLayoutStyles } from './components/ScreenHeader'
 
 export default function ChangePassword() {
   const router = useRouter();
@@ -58,19 +59,17 @@ export default function ChangePassword() {
   return (
     <SafeAreaView style={styles.container}>
       <LoadingOverlay visible={loading} />
-      
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Change Password</Text>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={() => router.back()}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="arrow-forward" size={18} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
-        </View>
 
+      <ScreenHeader
+        title="Change Password"
+        right={<HeaderBackButton onPress={() => router.back()} icon="arrow-forward" />}
+      />
+
+      <ScrollView
+        style={screenLayoutStyles.scrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={screenLayoutStyles.scrollContent}
+      >
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>SECURITY CREDENTIALS</Text>
           <View style={styles.formCard}>
@@ -144,40 +143,11 @@ const styles = StyleSheet.create({
   container: { 
     flex: 1, 
     backgroundColor: 'rgb(251, 252, 247)' 
-},
-
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingVertical: 16, 
-    marginBottom: 16 
-},
-
-  title: { 
-    fontSize: 22, 
-    color: 'rgb(16, 32, 15)', 
-    fontFamily: 'Montserrat_700Bold'
- },
-
-  backButton: { 
-    width: 30,
-    height: 30,
-    borderRadius: 10, 
-    backgroundColor: 'rgb(239, 245, 232)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-},
-
-  content: { 
-    paddingHorizontal: 14,
-     paddingTop: 18, 
-     paddingBottom: 60 
-    },
+  },
 
   section: { 
     marginBottom: 32 
-},
+  },
 
   sectionLabel: { 
     fontSize: 11, 

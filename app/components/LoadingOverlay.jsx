@@ -1,5 +1,5 @@
 import React from 'react'
-import { StyleSheet, View, Modal, ActivityIndicator } from 'react-native'
+import { ActivityIndicator, Modal, StyleSheet, View } from 'react-native'
 
 const LoadingOverlay = ({ visible }) => {
   return (

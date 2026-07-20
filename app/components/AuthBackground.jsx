@@ -59,13 +59,13 @@ const styles = StyleSheet.create({
   },
 
   topLeft: {
-    top: 126,
+    top: 90,
     left: -80,
     transform: [{ scaleX: -1 }],
   },
 
   topRight: {
-    top: 126,
+    top: 90,
     right: -78,
   },
   leaf: {

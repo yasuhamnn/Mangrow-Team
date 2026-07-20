@@ -1,10 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Animated,
-  Dimensions,
-  FlatList,
   Image,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,12 +13,14 @@ import { Feather, Ionicons } from '@expo/vector-icons'
 import { Link, useRouter } from 'expo-router'
 import AdaptiveLocationText from './components/AdaptiveLocationText'
 import BottomNav from './components/BottomNav'
+import ScreenHeader, { screenLayoutStyles } from './components/ScreenHeader'
 import {
   getRecentReportsForDashboard,
   getVolunteerDashboardStats,
 } from './utils/dashboardBackend'
 import { getStatusLabel } from './utils/shared/reportQuery'
-import { useBottomNavMetrics } from './utils/shared/screenLayout'
+import { useBottomNavMetrics, useResponsiveLayout } from './utils/shared/screenLayout'
+import { usePullToRefresh } from './utils/shared/usePullToRefresh'
 import { getUserProfile } from './utils/userService'
 
 const QUICK_TOOLS = [
@@ -32,12 +30,20 @@ const QUICK_TOOLS = [
   { key: 'reports', title: 'My Reports', icon: 'time-outline', href: '/profile' },
 ]
 
+const HERO_LAYOUT = {
+  textGap: 2, /** Tight gap between eyebrow, title, and subtitle */
+  
+  subtitleToButtonGap: 20, /** Gap between subtitle line and CTA button */
+  buttonPaddingVertical: 12,  /** Extra height on each horizontal carousel card */
+  cardExtraHeight: 30,  /** height sa bse sa carousel box */
+}
+
 const HERO_SLIDES = [
   {
     id: 'submit',
     image: require('../assets/mangroves_carousel_1.webp'),
     getEyebrow: (name) => `HI, ${name} 👋`,
-    title: 'Protect mangroves with us\n',
+    title: 'Protect mangroves with us',
     subtitle: 'Monitor mangroves, protect coastlines',
     ctaText: 'Submit →',
     href: '/camera',
@@ -46,15 +52,12 @@ const HERO_SLIDES = [
     id: 'map',
     image: require('../assets/mangroves_carousel_2.webp'),
     getEyebrow: () => 'EXPLORE THE MAP',
-    title: 'See reports near you\n',
+    title: 'See reports near you',
     subtitle: 'Track unhealthy and healthy mangrove areas',
     ctaText: 'Open Map →',
     href: '/map',
   },
 ]
-
-const SCREEN_WIDTH = Dimensions.get('window').width
-const HERO_CARD_WIDTH = SCREEN_WIDTH - 28
 
 const DASHBOARD_STATS = [
   {
@@ -83,14 +86,12 @@ const DASHBOARD_STATS = [
 export default function Dashboard() {
   const router = useRouter()
   const { scrollPadding } = useBottomNavMetrics()
+  const { heroCardWidth, heroMinHeight, rs, isCompact } = useResponsiveLayout()
   const [userName, setUserName] = useState('FRIEND')
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ unhealthy: 0, resolved: 0, myReports: 0 })
   const [recentReports, setRecentReports] = useState([])
-  const fadeAnim = useRef(new Animated.Value(0)).current
-  const slideAnim = useRef(new Animated.Value(10)).current
-  const [isProfileModalVisible, setIsProfileModalVisible] = useState(false)
   const [activeHeroIndex, setActiveHeroIndex] = useState(0)
 
   const heroSlides = useMemo(
@@ -101,67 +102,65 @@ export default function Dashboard() {
     [userName]
   )
 
+  const heroResponsive = useMemo(
+    () => createHeroResponsiveStyles(rs, heroCardWidth, heroMinHeight),
+    [rs, heroCardWidth, heroMinHeight]
+  )
+
   const handleHeroScroll = useCallback((e) => {
-    const index = Math.round(e.nativeEvent.contentOffset.x / HERO_CARD_WIDTH)
+    const index = Math.round(e.nativeEvent.contentOffset.x / heroCardWidth)
     const clamped = Math.max(0, Math.min(index, heroSlides.length - 1))
     setActiveHeroIndex((prev) => (prev === clamped ? prev : clamped))
-  }, [heroSlides.length])
+  }, [heroSlides.length, heroCardWidth])
+
+  const loadDashboard = useCallback(async () => {
+    const profile = await getUserProfile()
+    if (profile?.full_name) {
+      const firstName = profile.full_name.trim().split(' ')[0]
+      setUserName((firstName || 'Friend').toUpperCase())
+      setAvatarUrl(profile.avatar_url || null)
+    }
+
+    const [statsResult, reportsResult] = await Promise.allSettled([
+      getVolunteerDashboardStats(),
+      getRecentReportsForDashboard(5),
+    ])
+
+    if (statsResult.status === 'fulfilled') {
+      setStats(statsResult.value)
+    }
+
+    if (reportsResult.status === 'fulfilled') {
+      setRecentReports(reportsResult.value.slice(0, 5))
+    }
+  }, [])
+
+  const { refreshControl } = usePullToRefresh(loadDashboard)
 
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const profile = await getUserProfile()
-        if (profile) {
-          const firstName = profile.full_name.trim().split(' ')[0]
-          setUserName(firstName.toUpperCase())
-          if (profile.avatar_url) {
-            setAvatarUrl(profile.avatar_url)
-          }
-        }
-
-        const [dashboardStats, reports] = await Promise.all([
-          getVolunteerDashboardStats(),
-          getRecentReportsForDashboard(5),
-        ])
-        setStats(dashboardStats)
-        setRecentReports(reports.slice(0, 5))
+        await loadDashboard()
+      } catch {
+        // ignore initial load errors; UI shows empty state
       } finally {
         setLoading(false)
       }
     }
 
     fetchUser()
-
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-      }),
-    ]).start()
-  }, [])
+  }, [loadDashboard])
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.content, { paddingBottom: scrollPadding }]}
-        >
-          <View style={styles.header}>
-            <View style={styles.brandWrap}>
-              <Text style={styles.brandText}>Dashboard</Text>
-            </View>
-
-            <TouchableOpacity 
-              style={styles.settingsBtn} 
+    <SafeAreaView style={screenLayoutStyles.screenContainer} edges={['top', 'left', 'right']}>
+      <ScreenHeader
+          title="Dashboard"
+          right={
+            <TouchableOpacity
+              style={styles.profileBtn}
               activeOpacity={0.85}
-              onPress={() => setIsProfileModalVisible(true)}
+              onPress={() => router.push('/profile')}
+              accessibilityLabel="Open profile"
             >
               {avatarUrl ? (
                 <Image source={{ uri: avatarUrl }} style={styles.profileImg} />
@@ -169,40 +168,67 @@ export default function Dashboard() {
                 <Feather name="user" size={20} color="rgb(48, 64, 24)" />
               )}
             </TouchableOpacity>
-          </View>
+          }
+        />
 
+        <ScrollView
+          style={screenLayoutStyles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[screenLayoutStyles.scrollContent, { paddingBottom: scrollPadding }]}
+          refreshControl={refreshControl}
+        >
           <View style={styles.heroCarouselWrap}>
-            <FlatList
-              data={heroSlides}
-              keyExtractor={(item) => item.id}
+            <ScrollView
               horizontal
               pagingEnabled
               decelerationRate="fast"
               showsHorizontalScrollIndicator={false}
-              snapToInterval={HERO_CARD_WIDTH}
+              snapToInterval={heroCardWidth}
               snapToAlignment="start"
               bounces={false}
               scrollEventThrottle={16}
+              nestedScrollEnabled
               onScroll={handleHeroScroll}
-              renderItem={({ item }) => (
-                <View style={[styles.heroCard, { width: HERO_CARD_WIDTH }]}>
+            >
+              {heroSlides.map((item) => (
+                <View
+                  key={item.id}
+                  style={[styles.heroCard, heroResponsive.card]}
+                >
                   <Image
                     source={item.image}
-                    style={styles.heroLogo}
+                    style={[styles.heroLogo, heroResponsive.logo]}
                   />
-                  <View style={styles.heroContent}>
-                    <Text style={styles.heroEyebrow}>{item.eyebrow}</Text>
-                    <Text style={styles.heroTitle}>{item.title}</Text>
-                    <Text style={styles.subtitle}>{item.subtitle}</Text>
-                    <Link href={item.href} asChild>
-                      <TouchableOpacity style={styles.submitBtn} activeOpacity={0.88}>
-                        <Text style={styles.submitText}>{item.ctaText}</Text>
-                      </TouchableOpacity>
-                    </Link>
+                  <View style={[styles.heroContent, heroResponsive.content]}>
+                    <View style={[styles.heroTextBlock, heroResponsive.textBlock]}>
+                      <Text style={[styles.heroEyebrow, heroResponsive.eyebrow]}>{item.eyebrow}</Text>
+                      <Text
+                        style={[styles.heroTitle, heroResponsive.title]}
+                        numberOfLines={isCompact ? 2 : 3}
+                      >
+                        {item.title}
+                      </Text>
+                      <Text
+                        style={[styles.subtitle, heroResponsive.subtitle]}
+                        numberOfLines={2}
+                      >
+                        {item.subtitle}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      activeOpacity={0.88}
+                      onPress={() => router.push(item.href)}
+                    >
+                      <View style={[styles.heroCtaBtn, heroResponsive.heroCtaBtn]}>
+                        <Text style={[styles.heroCtaText, heroResponsive.heroCtaText]}>
+                          {item.ctaText}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
                   </View>
                 </View>
-              )}
-            />
+              ))}
+            </ScrollView>
 
             <View style={styles.heroDotsRow}>
               {heroSlides.map((slide, index) => (
@@ -236,35 +262,18 @@ export default function Dashboard() {
           </View>
 
           <View style={styles.toolsGrid}>
-            {QUICK_TOOLS.map((tool) => {
-              const cardContent = (
-                <>
+            {QUICK_TOOLS.map((tool) => (
+              <Link key={tool.key} href={tool.href} asChild>
+                <TouchableOpacity style={styles.toolCard} activeOpacity={0.88}>
                   <View style={styles.toolIconWrap}>
                     <Ionicons name={tool.icon} size={22} color="rgb(44, 143, 47)" />
                   </View>
                   <Text style={styles.toolTitle}>{tool.title}</Text>
-                </>
-              );
-
-              if (tool.href) {
-                return (
-                  <Link key={tool.key} href={tool.href} asChild>
-                    <TouchableOpacity style={styles.toolCard} activeOpacity={0.88}>
-                      {cardContent}
-                    </TouchableOpacity>
-                  </Link>
-                );
-              }
-
-              return (
-                <TouchableOpacity key={tool.key} style={styles.toolCard} activeOpacity={0.88}>
-                  {cardContent}
                 </TouchableOpacity>
-              );
-            })}
+              </Link>
+            ))}
           </View>
 
-          {/* --- Recent Reports Section --- */}
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recent Reports</Text>
             <TouchableOpacity onPress={() => router.push({ pathname: '/map', params: { scrollToList: '1' } })}>
@@ -339,37 +348,6 @@ export default function Dashboard() {
           ))
           )}
         </ScrollView>
-      </Animated.View>
-
-      {/* Profile Picture Popup Modal */}
-      <Modal
-        visible={isProfileModalVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setIsProfileModalVisible(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay} 
-          activeOpacity={1} 
-          onPress={() => setIsProfileModalVisible(false)}
-        >
-          <View style={styles.modalContent}>
-            {avatarUrl ? (
-              <Image source={{ uri: avatarUrl }} style={styles.fullProfileImg} />
-            ) : (
-              <View style={styles.placeholderAvatar}>
-                <Feather name="user" size={80} color="rgb(48, 64, 24)" />
-              </View>
-            )}
-            <TouchableOpacity 
-              style={styles.closeModalBtn}
-              onPress={() => setIsProfileModalVisible(false)}
-            >
-              <Ionicons name="close-circle" size={48} color="rgb(255, 255, 255)" />
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
-      </Modal>
 
       <BottomNav activeTab="home" />
     </SafeAreaView>
@@ -377,37 +355,7 @@ export default function Dashboard() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: 'rgb(251, 252, 247)',
-  },
-
-  content: {
-    paddingHorizontal: 14,
-    paddingTop: 18,
-    paddingBottom: 24,
-  },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-
-  brandWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-
-  brandText: {
-    fontSize: 22,
-    fontFamily: 'Montserrat_700Bold',
-    color: 'rgb(16, 32, 15)',
-    letterSpacing: -0.3,
-  },
-
-  settingsBtn: {
+  profileBtn: {
     width: 33,
     height: 33,
     borderRadius: 20,
@@ -427,72 +375,64 @@ const styles = StyleSheet.create({
   },
 
   heroCard: {
-    borderRadius: 18,
+    borderRadius: 18, 
     backgroundColor: 'rgb(207, 239, 199)',
     overflow: 'hidden',
     flexDirection: 'column',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 20,  /** para sa box sa hero */
     alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    minHeight: 148,
   },
 
   heroContent: {
-    flex: 1,
     alignSelf: 'stretch',
-    justifyContent: 'flex-start',
+    zIndex: 1,
+  },
+
+  heroTextBlock: {
+    flexShrink: 1,
+    paddingRight: 72,
   },
 
   heroLogo: {
     position: 'absolute',
-    right: -40,
-    bottom: -20,
-    width: 200,
-    height: 170,
     opacity: 0.45,
   },
 
   heroEyebrow: {
-    fontSize: 12,
     fontFamily: 'Montserrat_600SemiBold',
     color: 'rgb(67, 113, 5)',
     letterSpacing: 0.15,
   },
 
   heroTitle: {
-    fontSize: 14,
     fontFamily: 'Montserrat_700Bold',
-    lineHeight: 24,
     color: 'rgb(15, 27, 15)',
-    marginTop: 2,
-
   },
 
   subtitle: {
-    fontSize: 11,
     color: 'rgb(55, 65, 81)',
-    lineHeight: 14,
-    fontWeight: '400',
-    bottom: 18,
+    fontFamily: 'Montserrat_400Regular',
   },
 
-  submitBtn: {
+  /** Hero CTA — same look as Sign In button (search: heroCtaBtn) */
+  heroCtaBtn: {
     alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgb(52, 162, 50)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 10,
+    backgroundColor: 'rgb(109, 170, 26)',
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: 'rgb(109, 170, 26)',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
 
-  submitText: {
+  heroCtaText: {
     color: 'rgb(255, 255, 255)',
     fontSize: 13,
-    fontFamily: 'Montserrat_600SemiBold',
+    fontFamily: 'Montserrat_700Bold',
     lineHeight: 15,
     letterSpacing: -0.1,
   },
@@ -514,7 +454,7 @@ const styles = StyleSheet.create({
 
   heroDotActive: {
     width: 18,
-    backgroundColor: 'rgb(52, 162, 50)',
+    backgroundColor: 'rgb(109, 170, 26)',
   },
 
   statsRow: {
@@ -582,7 +522,6 @@ const styles = StyleSheet.create({
     minHeight: 94,
     borderRadius: 16,
     backgroundColor: 'rgb(255, 255, 255)',
-    /* subtle shadow similar to statCard */
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingTop: 12,
@@ -601,9 +540,6 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 14,
     backgroundColor: 'rgb(221, 243, 214)',
-    /* ensure no border */
-    borderWidth: 0,
-    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -653,12 +589,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 
-  reportLocation: {
-    fontSize: 11,
-    color: 'rgb(123, 129, 119)',
-    fontFamily: 'Montserrat_400Regular',
-  },
-
   reportFooter: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -699,49 +629,6 @@ const styles = StyleSheet.create({
     color: 'rgb(16, 32, 15)',
   },
 
-  reportBadge: {
-    position: 'absolute',
-    top: -4,
-    right: -2,
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    backgroundColor: 'rgb(255, 122, 47)',
-    borderWidth: 1.25,
-    borderColor: 'rgb(255, 255, 255)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalContent: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  fullProfileImg: {
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    borderWidth: 4,
-    borderColor: 'rgb(255, 255, 255)',
-  },
-  placeholderAvatar: {
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgb(239, 245, 232)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: 'rgb(255, 255, 255)',
-  },
-  closeModalBtn: {
-    marginTop: 30,
-  },
   emptyReports: {
     textAlign: 'center',
     color: 'rgb(156, 163, 175)',
@@ -749,3 +636,26 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 })
+
+/**
+ * Responsive hero sizes — paired with HERO_LAYOUT at top of file.
+ * `rs()` scales values per screen width; `gap` uses those scaled values for spacing.
+ */
+function createHeroResponsiveStyles(rs, heroCardWidth, heroMinHeight) {
+  return {
+    card: { width: heroCardWidth, minHeight: heroMinHeight + rs(HERO_LAYOUT.cardExtraHeight) },
+    logo: {
+      width: rs(170),
+      height: rs(140),
+      right: rs(-36),
+      bottom: rs(-18),
+    },
+    content: { gap: rs(HERO_LAYOUT.subtitleToButtonGap) },
+    textBlock: { gap: rs(HERO_LAYOUT.textGap) },
+    eyebrow: { fontSize: rs(12) },
+    title: { fontSize: rs(14), lineHeight: rs(18) },
+    subtitle: { fontSize: rs(11), lineHeight: rs(14) },
+    heroCtaBtn: { paddingVertical: rs(HERO_LAYOUT.buttonPaddingVertical) },
+    heroCtaText: { fontSize: rs(13) },
+  }
+}

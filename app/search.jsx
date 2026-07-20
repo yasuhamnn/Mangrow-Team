@@ -27,6 +27,8 @@ import {
 } from './utils/searchBackend'
 
 import { getStatusLabel } from './utils/shared/reportQuery'
+import { usePullToRefresh } from './utils/shared/usePullToRefresh'
+import { SCREEN_BG, SCREEN_HEADER_BORDER, HeaderBackButton, screenLayoutStyles } from './components/ScreenHeader'
 
 
 export default function Search() {
@@ -143,6 +145,18 @@ export default function Search() {
     }
   }, [searchQuery, runSearch])
 
+  const refreshSearch = useCallback(async () => {
+    if (activeSpeciesRef.current) {
+      await runSearch(activeSpeciesRef.current, { silent: true, speciesOnly: activeSpeciesRef.current })
+      return
+    }
+    const term = searchQuery.trim()
+    if (term) {
+      await runSearch(term, { silent: true })
+    }
+  }, [runSearch, searchQuery])
+
+  const { refreshControl } = usePullToRefresh(refreshSearch)
 
   const hasQuery = searchQuery.trim().length > 0
 
@@ -150,9 +164,7 @@ export default function Search() {
     <SafeAreaView style={styles.container}>
       <Animated.View style={[styles.main, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()} activeOpacity={0.7}>
-            <Ionicons name="arrow-back" size={24} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
+          <HeaderBackButton onPress={() => router.back()} />
 
           <View style={styles.searchBar}>
             <Feather name="search" size={18} color="rgb(123, 129, 119)" style={styles.searchIcon} />
@@ -165,32 +177,31 @@ export default function Search() {
                 setSearchQuery(text)
                 activeSpeciesRef.current = null
               }}
-
               onSubmitEditing={() => runSearch(searchQuery)}
               autoFocus
               returnKeyType="search"
             />
 
             {searchQuery.length > 0 && (
-
               <TouchableOpacity
                 onPress={() => {
                   setSearchQuery('')
                   activeSpeciesRef.current = null
                   setResults({ species: [], reports: [] })
                 }}
-
               >
-
                 <Ionicons name="close-circle" size={20} color="rgb(123, 129, 119)" />
               </TouchableOpacity>
-
             )}
-
           </View>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView
+          style={screenLayoutStyles.scrollView}
+          contentContainerStyle={screenLayoutStyles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={refreshControl}
+        >
           {loading && <ActivityIndicator size="small" color="rgb(109, 170, 26)" style={{ marginBottom: 16 }} />}
 
           {hasQuery && (
@@ -303,17 +314,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', 
     alignItems: 'center', 
     paddingHorizontal: 14, 
-    paddingTop: 12, 
-    paddingBottom: 16, 
-    gap: 10 
-  },
-
-  backButton: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    justifyContent: 'center', 
-    alignItems: 'center' 
+    paddingTop: 18, 
+    paddingBottom: 12, 
+    gap: 10,
+    backgroundColor: SCREEN_BG,
+    borderBottomWidth: 1,
+    borderBottomColor: SCREEN_HEADER_BORDER,
   },
 
   searchBar: {

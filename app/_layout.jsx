@@ -1,12 +1,15 @@
 import {
   Montserrat_400Regular,
+  Montserrat_500Medium,
   Montserrat_600SemiBold,
   Montserrat_700Bold,
   useFonts,
 } from '@expo-google-fonts/montserrat'
 import * as Notifications from 'expo-notifications'
 import { Stack, useRouter } from 'expo-router'
+import * as SplashScreen from 'expo-splash-screen'
 import { useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { supabase } from '../supabaseClient'
 import {
@@ -15,10 +18,13 @@ import {
 } from './utils/pushNotificationNavigation'
 import { registerForPushNotificationsAsync } from './utils/pushNotifications'
 
+SplashScreen.preventAutoHideAsync().catch(() => {})
+
 export default function RootLayout() {
   const router = useRouter()
   const [fontsLoaded] = useFonts({
     Montserrat_400Regular,
+    Montserrat_500Medium,
     Montserrat_600SemiBold,
     Montserrat_700Bold,
   })
@@ -76,7 +82,19 @@ export default function RootLayout() {
     }
   }, [router])
 
-  if (!fontsLoaded) return null
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {})
+    }
+  }, [fontsLoaded])
+
+  if (!fontsLoaded) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgb(251, 252, 247)' }}>
+        <ActivityIndicator size="large" color="rgb(109, 170, 26)" />
+      </View>
+    )
+  }
 
   return (
     <SafeAreaProvider>

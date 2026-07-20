@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   StyleSheet,
   Text,
@@ -17,6 +17,8 @@ import { getActiveResolutionForReport } from './utils/volunteerResolutionSubmitB
 import { getStatusLabel } from './utils/shared/reportQuery'
 import ImageViewerModal from './components/ImageViewerModal'
 import AdaptiveLocationText from './components/AdaptiveLocationText'
+import { usePullToRefresh } from './utils/shared/usePullToRefresh'
+import ScreenHeader, { HeaderBackButton, HeaderSideSpacer, screenLayoutStyles } from './components/ScreenHeader'
 
 export default function ReportDetails() {
   const router = useRouter()
@@ -38,27 +40,29 @@ export default function ReportDetails() {
     setViewerOpen(true)
   }
 
-  useEffect(() => {
-    let mounted = true
-
-    const load = async () => {
-      try {
-        setLoading(true)
-        const data = await getReportById(id)
-        if (mounted) setReport(data)
-        const resolution = await getActiveResolutionForReport(id)
-        if (mounted) setActiveResolution(resolution)
-      } catch (e) {
+  const loadReport = useCallback(async ({ silent = false } = {}) => {
+    if (!id) return
+    try {
+      if (!silent) setLoading(true)
+      const data = await getReportById(id)
+      setReport(data)
+      const resolution = await getActiveResolutionForReport(id)
+      setActiveResolution(resolution)
+    } catch (e) {
+      if (!silent) {
         Alert.alert('Error', e?.message || 'Failed to load report.')
-        if (mounted) router.back()
-      } finally {
-        if (mounted) setLoading(false)
+        router.back()
       }
+    } finally {
+      if (!silent) setLoading(false)
     }
+  }, [id, router])
 
-    if (id) load()
-    return () => { mounted = false }
-  }, [id])
+  const { refreshControl } = usePullToRefresh(() => loadReport({ silent: true }))
+
+  useEffect(() => {
+    loadReport()
+  }, [loadReport])
 
   const onRequestResolution = () => {
     router.push({ pathname: '/report_resolution_track', params: { reportId: id } })
@@ -84,15 +88,18 @@ export default function ReportDetails() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: scrollBottomPadding }]}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={18} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Report Details</Text>
-          <View style={{ width: 38 }} />
-        </View>
+      <ScreenHeader
+        title="Report Details"
+        centered
+        leading={<HeaderBackButton onPress={() => router.back()} />}
+        right={<HeaderSideSpacer />}
+      />
 
+      <ScrollView
+        style={screenLayoutStyles.scrollView}
+        contentContainerStyle={[screenLayoutStyles.scrollContent, { paddingBottom: scrollBottomPadding }]}
+        refreshControl={refreshControl}
+      >
         <View style={styles.card}>
           <TouchableOpacity activeOpacity={0.9} onPress={() => openViewer(0)}>
             <Image
@@ -202,22 +209,6 @@ export default function ReportDetails() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'rgb(251, 252, 247)' },
-  content: { padding: 16 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  backButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: { fontSize: 20, fontFamily: 'Montserrat_700Bold', color: 'rgb(16, 32, 15)' },
   card: {
     backgroundColor: 'rgb(255, 255, 255)',
     borderRadius: 20,

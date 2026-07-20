@@ -1,11 +1,13 @@
 
 import { Feather, Ionicons } from '@expo/vector-icons'
-import { Link, useRouter } from 'expo-router'
-import React, { useEffect, useRef, useState } from 'react'
+import { useRouter } from 'expo-router'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Animated, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { getAdminProfile, getAdminStats, getRecentAdminActivity } from '../utils/adminDashboardBackend'
-import { useBottomNavMetrics } from '../utils/shared/screenLayout'
+import { useBottomNavMetrics, useResponsiveLayout } from '../utils/shared/screenLayout'
+import { usePullToRefresh } from '../utils/shared/usePullToRefresh'
+import ScreenHeader, { HeaderIconButton, screenLayoutStyles } from '../components/ScreenHeader'
 import AdminBottomNav from './AdminBottomNav'
 const ADMIN_TOOLS = [
   {
@@ -61,6 +63,7 @@ const ADMIN_STATS = [
 export default function AdminDashboard() {
   const router = useRouter();
   const { scrollPadding } = useBottomNavMetrics()
+  const { heroMinHeight, rs, isCompact } = useResponsiveLayout()
   const fadeAnim = useRef(new Animated.Value(0)).current
   const slideAnim = useRef(new Animated.Value(10)).current
   const [adminName, setAdminName] = useState('Admin')
@@ -68,28 +71,29 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState({ pending: 0, verified: 0, alerts: 0 })
   const [recentActivity, setRecentActivity] = useState([])
 
-  useEffect(() => {
-    const fetchAdminData = async () => {
-      try {
-        const profile = await getAdminProfile()
-        if (profile) {
-          const fullName = profile.full_name || 'Admin'
-          const firstName = fullName.trim().split(/\s+/)[0]
-          setAdminName(firstName)
-          setAvatarUrl(profile.avatar_url || null)
-        }
-
-        const dashboardStats = await getAdminStats()
-        setStats(dashboardStats)
-
-        const activity = await getRecentAdminActivity(5)
-        setRecentActivity(activity)
-      } catch (error) {
-        console.error('Error fetching admin data:', error)
-      }
+  const loadAdminData = useCallback(async () => {
+    const profile = await getAdminProfile()
+    if (profile) {
+      const fullName = profile.full_name || 'Admin'
+      const firstName = fullName.trim().split(/\s+/)[0]
+      setAdminName(firstName)
+      setAvatarUrl(profile.avatar_url || null)
     }
-    fetchAdminData()
+
+    const dashboardStats = await getAdminStats()
+    setStats(dashboardStats)
+
+    const activity = await getRecentAdminActivity(5)
+    setRecentActivity(activity)
   }, [])
+
+  const { refreshControl } = usePullToRefresh(loadAdminData)
+
+  useEffect(() => {
+    loadAdminData().catch((error) => {
+      console.error('Error fetching admin data:', error)
+    })
+  }, [loadAdminData])
 
   useEffect(() => {
     Animated.parallel([
@@ -109,14 +113,11 @@ export default function AdminDashboard() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.content, { paddingBottom: scrollPadding }]}
-        >
-          <View style={styles.header}>
-            <Text style={styles.title}>Admin Dashboard</Text>
-            <TouchableOpacity 
-              style={styles.settingsBtn} 
+        <ScreenHeader
+          title="Admin Dashboard"
+          right={
+            <TouchableOpacity
+              style={styles.settingsBtn}
               activeOpacity={0.85}
               onPress={() => router.push('/admin/admin_profile')}
             >
@@ -126,26 +127,61 @@ export default function AdminDashboard() {
                 <Feather name="user" size={20} color="rgb(48, 64, 24)" />
               )}
             </TouchableOpacity>
-          </View>
+          }
+        />
 
-          <View style={styles.heroCard}>
+        <ScrollView
+          style={screenLayoutStyles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.content, { paddingBottom: scrollPadding }]}
+          refreshControl={refreshControl}
+        >
+          <View style={[styles.heroCard, { minHeight: heroMinHeight }]}>
             <Image
               source={require('../../assets/mangroves_carousel_1.webp')}
-              style={styles.heroLogo}
+              style={[
+                styles.heroLogo,
+                {
+                  width: rs(170),
+                  height: rs(140),
+                  right: rs(-36),
+                  bottom: rs(-18),
+                },
+              ]}
             />
             <View style={styles.heroContent}>
-              <Text style={styles.heroEyebrow}>
-                ADMIN, {adminName.toUpperCase()} 👋
-              </Text>
-              <Text style={styles.heroTitle}>Manage Mangrove Health{'\n'}</Text>
-              <Text style={styles.subtitle}>
-                Review reports and monitor ecosystems
-              </Text>
-              <Link href="/admin/admin_verify" asChild>
-                <TouchableOpacity style={styles.submitBtn} activeOpacity={0.88}>
-                  <Text style={styles.submitText}>Verify Reports →</Text>
-                </TouchableOpacity>
-              </Link>
+              <View style={styles.heroTextBlock}>
+                <Text style={[styles.heroEyebrow, { fontSize: rs(12) }]}>
+                  ADMIN, {adminName.toUpperCase()} 👋
+                </Text>
+                <Text
+                  style={[styles.heroTitle, { fontSize: rs(14), lineHeight: rs(18) }]}
+                  numberOfLines={isCompact ? 2 : 3}
+                >
+                  Manage Mangrove Health
+                </Text>
+                <Text
+                  style={[styles.subtitle, { fontSize: rs(11), lineHeight: rs(14) }]}
+                  numberOfLines={2}
+                >
+                  Review reports and monitor ecosystems
+                </Text>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() => router.push('/admin/admin_verify')}
+              >
+                <View
+                  style={[
+                    styles.submitBtn,
+                    { paddingVertical: rs(12), marginTop: rs(20) },
+                  ]}
+                >
+                  <Text style={[styles.submitText, { fontSize: rs(13) }]}>
+                    Verify Reports →
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -255,20 +291,8 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 14,
-    paddingTop: 18,
+    paddingTop: 4,
     paddingBottom: 24,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 22,
-    color: 'rgb(16, 32, 15)',
-    fontFamily: 'Montserrat_700Bold',
   },
   settingsBtn: {
     width: 33,
@@ -283,14 +307,6 @@ const styles = StyleSheet.create({
     height: 30,
     borderRadius: 20,
   },
-  backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 15,
-    backgroundColor: 'rgb(239, 245, 232)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   heroCard: {
     width: '100%',
     borderRadius: 18,
@@ -303,46 +319,43 @@ const styles = StyleSheet.create({
   heroContent: {
     zIndex: 1,
   },
+  heroTextBlock: {
+    flexShrink: 1,
+    paddingRight: 72,
+    gap: 2,
+  },
   heroLogo: {
     position: 'absolute',
-    right: -40,
-    bottom: -40,
-    width: 200,
-    height: 170,
     opacity: 0.45,
   },
   heroEyebrow: {
-    fontSize: 12,
     fontFamily: 'Montserrat_600SemiBold',
     color: 'rgb(67, 113, 5)',
     letterSpacing: 0.15,
   },
   heroTitle: {
-    fontSize: 14,
     fontFamily: 'Montserrat_700Bold',
-    lineHeight: 24,
     color: 'rgb(15, 27, 15)',
-    marginTop: 2,
   },
   subtitle: {
-    fontSize: 11,
     color: 'rgb(55, 65, 81)',
-    lineHeight: 14,
     fontFamily: 'Montserrat_400Regular',
-    bottom: 18,
   },
   submitBtn: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgb(52, 162, 50)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 20,
-    marginTop: 10,
+    backgroundColor: 'rgb(109, 170, 26)',
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: 'rgb(109, 170, 26)',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   submitText: {
     color: 'rgb(255, 255, 255)',
-    fontSize: 13,
-    fontFamily: 'Montserrat_600SemiBold',
+    fontFamily: 'Montserrat_700Bold',
   },
   statsRow: {
     flexDirection: 'row',

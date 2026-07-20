@@ -1,19 +1,20 @@
-import React, { useEffect, useState } from 'react'
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  Image,
-} from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import React, { useEffect, useState } from 'react'
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import LoadingOverlay from '../components/LoadingOverlay'
+import ScreenHeader, { HeaderBackButton, HeaderSideSpacer, screenLayoutStyles } from '../components/ScreenHeader'
 import {
   getReportForRejection,
   rejectReportWithReason,
@@ -86,15 +87,18 @@ export default function AdminRejectReport() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={18} color="rgb(16, 32, 15)" />
-        </TouchableOpacity>
-        <Text style={styles.title}>Reject Report</Text>
-        <View style={{ width: 38 }} />
-      </View>
+      <ScreenHeader
+        title="Reject Report"
+        centered
+        leading={<HeaderBackButton onPress={() => router.back()} />}
+        right={<HeaderSideSpacer />}
+      />
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={screenLayoutStyles.scrollView}
+        contentContainerStyle={screenLayoutStyles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <View style={styles.summaryCard}>
           <Image
             source={report?.image_url ? { uri: report.image_url } : require('../../assets/mangroves_carousel_1.webp')}
@@ -161,30 +165,6 @@ export default function AdminRejectReport() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: 'rgb(251, 252, 247)' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  backButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  title: {
-    fontSize: 20,
-    fontFamily: 'Montserrat_700Bold',
-    color: 'rgb(16, 32, 15)',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
-  },
   summaryCard: {
     flexDirection: 'row',
     gap: 12,

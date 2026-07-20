@@ -44,6 +44,7 @@ export async function fetchRouteToDestination(origin, destination) {
       coordinates: coords.map(([lng, lat]) => ({ latitude: lat, longitude: lng })),
       distanceMeters: json.routes[0].distance,
       durationSeconds: json.routes[0].duration,
+      isFallback: false,
     }
   } catch {
     return {
@@ -53,6 +54,7 @@ export async function fetchRouteToDestination(origin, destination) {
       ],
       distanceMeters: haversineMeters(origin, destination),
       durationSeconds: null,
+      isFallback: true,
     }
   }
 }
@@ -74,6 +76,16 @@ export function formatDistance(meters) {
   if (meters == null) return '—'
   if (meters < 1000) return `${Math.round(meters)} m`
   return `${(meters / 1000).toFixed(1)} km`
+}
+
+export function formatDuration(seconds) {
+  if (seconds == null) return null
+  const mins = Math.round(seconds / 60)
+  if (mins < 1) return '< 1 min walk'
+  if (mins < 60) return `~${mins} min walk`
+  const hours = Math.floor(mins / 60)
+  const rem = mins % 60
+  return rem > 0 ? `~${hours}h ${rem}m walk` : `~${hours}h walk`
 }
 
 export function isNearDestination(origin, destination, thresholdMeters = 80) {

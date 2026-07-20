@@ -1,15 +1,16 @@
+import * as Location from 'expo-location'
+import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Animated } from 'react-native'
-import { useRouter, useLocalSearchParams } from 'expo-router'
-import * as Location from 'expo-location'
 import { supabase } from '../../../supabaseClient'
 import {
-  getReportedLocationsForVolunteerMap,
-  subscribeToMapReports,
+    getReportedLocationsForVolunteerMap,
+    subscribeToMapReports,
 } from '../../utils/mapBackend'
 import { resolveDeviceHeading } from '../../utils/mapUserLocationMarker'
-import { buildVolunteerMapHtml } from './volunteerMapHtml'
 import { filterReportsByChip, filterReportsForMap } from './mapConstants'
+import { buildVolunteerMapHtml } from './volunteerMapHtml'
+import { usePullToRefresh } from '../../utils/shared/usePullToRefresh'
 
 export function useVolunteerMapScreen() {
   const router = useRouter()
@@ -212,6 +213,8 @@ export function useVolunteerMapScreen() {
     reportListScrollY.current = e.nativeEvent.layout.y
   }, [])
 
+  const { refreshing, onRefresh, refreshControl } = usePullToRefresh(() => loadReports({ silent: true }))
+
   const mapPanelProps = {
     mapHtml,
     mapType,
@@ -242,6 +245,9 @@ export function useVolunteerMapScreen() {
     setShowHealthy,
     filteredReports,
     isLoading,
+    refreshing,
+    onRefresh,
+    refreshControl,
     embeddedWebViewRef,
     fullscreenWebViewRef,
     mapPanelProps,

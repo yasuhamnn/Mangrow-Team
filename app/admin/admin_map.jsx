@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native'
 import { WebView } from 'react-native-webview'
 import { SafeAreaView } from 'react-native-safe-area-context'
@@ -16,6 +17,8 @@ import { useRouter } from 'expo-router'
 import AdminBottomNav from './AdminBottomNav'
 import { useBottomNavMetrics } from '../utils/shared/screenLayout'
 import { getApprovedReportsForMap } from '../utils/adminMapBackend'
+import { usePullToRefresh } from '../utils/shared/usePullToRefresh'
+import ScreenHeader, { HeaderBackButton, screenLayoutStyles } from '../components/ScreenHeader'
 
 const { height } = Dimensions.get('window')
 
@@ -160,24 +163,25 @@ export default function AdminMap() {
     ]).start()
   }, [])
 
-  useEffect(() => {
-    let mounted = true
-
-    const load = async () => {
-      try {
-        const reports = await getApprovedReportsForMap()
-        if (!mounted) return
-        setApprovedReports(reports || [])
-      } catch (e) {
+  const loadReports = useCallback(async ({ silent = false } = {}) => {
+    try {
+      if (!silent) setIsLoading(true)
+      const reports = await getApprovedReportsForMap()
+      setApprovedReports(reports || [])
+    } catch (e) {
+      if (!silent) {
         Alert.alert('Map data error', e?.message || 'Failed to load approved reports and location.')
-      } finally {
-        if (mounted) setIsLoading(false)
       }
+    } finally {
+      if (!silent) setIsLoading(false)
     }
-
-    load()
-    return () => { mounted = false }
   }, [])
+
+  const { refreshControl } = usePullToRefresh(() => loadReports({ silent: true }))
+
+  useEffect(() => {
+    loadReports()
+  }, [loadReports])
 
   const mapHtml = useMemo(() => buildAdminMapHtml(mapType), [mapType])
 
@@ -216,18 +220,22 @@ export default function AdminMap() {
       <Animated.View
         style={{
           flex: 1,
-          paddingBottom: totalHeight,
           opacity: fadeAnim,
           transform: [{ translateY: slideAnim }],
         }}
       >
-        <View style={styles.header}>
-          <Text style={styles.title}>Map</Text>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-backward" size={20} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
-        </View>
+        <ScreenHeader
+          title="Map"
+          right={<HeaderBackButton onPress={() => router.back()} icon="arrow-backward" />}
+        />
 
+        <ScrollView
+          style={screenLayoutStyles.scrollView}
+          contentContainerStyle={{ paddingBottom: totalHeight }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={refreshControl}
+          nestedScrollEnabled
+        >
         <View style={styles.mapBox}>
           <WebView
             ref={webViewRef}
@@ -276,6 +284,7 @@ export default function AdminMap() {
             {isLoading ? 'Loading reports…' : `Showing ${approvedReports.length} admin-approved location${approvedReports.length === 1 ? '' : 's'}.`}
           </Text>
         </View>
+        </ScrollView>
       </Animated.View>
 
       <AdminBottomNav activeTab="map" />
@@ -287,27 +296,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'rgb(251, 252, 247)',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 18,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 22,
-    color: 'rgb(16, 32, 15)',
-    fontFamily: 'Montserrat_700Bold',
-  },
-  backButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 15,
-    backgroundColor: 'rgb(239, 245, 232)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   mapBox: {
     height: height * 0.60,

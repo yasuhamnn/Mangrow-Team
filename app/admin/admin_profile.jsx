@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { StyleSheet, View, Text, TouchableOpacity, Image, ScrollView, Alert, Animated, ActivityIndicator } from 'react-native'
 import { Ionicons, Feather } from '@expo/vector-icons'
@@ -12,6 +12,8 @@ import {
   uploadAdminAvatar,
   signOutAdmin,
 } from '../utils/adminProfileBackend'
+import { usePullToRefresh } from '../utils/shared/usePullToRefresh'
+import ScreenHeader, { HEADER_ICON_COLOR, HEADER_ICON_SIZE, HeaderIconButton, screenLayoutStyles } from '../components/ScreenHeader'
 
 export default function AdminProfile() {
   const router = useRouter()
@@ -24,6 +26,19 @@ export default function AdminProfile() {
   const [avatarUrl, setAvatarUrl] = useState(null)
   const [uploading, setUploading] = useState(false)
   const [profileStats, setProfileStats] = useState({ pending: 0, verified: 0 })
+
+  const loadAdminProfile = useCallback(async () => {
+    const profile = await getAdminProfile()
+    if (!profile) return
+
+    setAdminData(profile)
+    setAvatarUrl(profile.avatar_url || null)
+
+    const stats = await getAdminProfileStats()
+    setProfileStats(stats)
+  }, [])
+
+  const { refreshControl } = usePullToRefresh(loadAdminProfile)
 
   useEffect(() => {
     Animated.parallel([
@@ -44,14 +59,7 @@ export default function AdminProfile() {
     const fetchAdminData = async () => {
       try {
         setLoading(true)
-        const profile = await getAdminProfile()
-        if (!profile) return
-
-        setAdminData(profile)
-        setAvatarUrl(profile.avatar_url || null)
-
-        const stats = await getAdminProfileStats()
-        setProfileStats(stats)
+        await loadAdminProfile()
       } catch (error) {
         console.error('Error fetching admin details:', error)
       } finally {
@@ -59,7 +67,7 @@ export default function AdminProfile() {
       }
     }
     fetchAdminData()
-  }, [])
+  }, [loadAdminProfile])
 
   const pickImage = async () => {
     try {
@@ -119,18 +127,21 @@ export default function AdminProfile() {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <Animated.View style={{ flex: 1, opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingBottom: scrollPadding }]}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Profile</Text>
-          <TouchableOpacity 
-            style={styles.backButton} 
-            onPress={handleLogout}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="log-out-outline" size={18} color="rgb(16, 32, 15)" />
-          </TouchableOpacity>
-        </View>
+        <ScreenHeader
+          title="Profile"
+          right={
+            <HeaderIconButton onPress={handleLogout}>
+              <Ionicons name="log-out-outline" size={HEADER_ICON_SIZE} color={HEADER_ICON_COLOR} />
+            </HeaderIconButton>
+          }
+        />
 
+        <ScrollView
+          style={screenLayoutStyles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[screenLayoutStyles.scrollContent, { paddingBottom: scrollPadding }]}
+          refreshControl={refreshControl}
+        >
         {/* Profile Card */}
         <View style={styles.profileCard}>
           <View style={styles.avatarContainer}>
@@ -226,31 +237,6 @@ const styles = StyleSheet.create({
   container:{
     flex: 1,
     backgroundColor: 'rgb(251, 252, 247)',
-  },
-  content: {
-    paddingHorizontal: 14,
-    paddingTop: 18,
-    paddingBottom: 24,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16,
-    marginBottom: 16,
-  },
-  title: {
-    fontSize: 22,
-    color: 'rgb(16, 32, 15)',
-    fontFamily: 'Montserrat_700Bold',
-  },
-  backButton: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
-    backgroundColor: 'rgb(239, 245, 232)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   profileCard: {
     backgroundColor: 'rgb(255, 255, 255)',

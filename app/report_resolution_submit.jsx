@@ -1,19 +1,18 @@
-import React, { useEffect, useState } from 'react'
-import {
-  StyleSheet,
-  View,
-  Text,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Image,
-  Alert,
-  ActivityIndicator,
-} from 'react-native'
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
 import { useLocalSearchParams, useRouter } from 'expo-router'
+import React, { useState } from 'react'
+import {
+    Alert,
+    Image,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
+} from 'react-native'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import LoadingOverlay from './components/LoadingOverlay'
 import { submitResolutionProof } from './utils/volunteerResolutionSubmitBackend'
 
@@ -214,10 +213,15 @@ const styles = StyleSheet.create({
   charCount: { fontSize: 11, color: 'rgb(156, 163, 175)', textAlign: 'right', marginTop: 6 },
   submitBtn: {
     backgroundColor: 'rgb(109, 170, 26)',
-    borderRadius: 16,
-    paddingVertical: 16,
+    borderRadius: 14,
+    paddingVertical: 14,
     alignItems: 'center',
+    shadowColor: 'rgb(109, 170, 26)',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
   submitBtnDisabled: { opacity: 0.7 },
-  submitBtnText: { color: 'rgb(255, 255, 255)', fontFamily: 'Montserrat_700Bold', fontSize: 14 },
+  submitBtnText: { color: 'rgb(255, 255, 255)', fontFamily: 'Montserrat_700Bold', fontSize: 15 },
 })

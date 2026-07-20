@@ -1,24 +1,43 @@
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator'
 import { supabase } from '../../supabaseClient'
 import { buildLocationText } from './shared/locationFormat'
+import { assertNetworkAvailable, toSubmissionErrorMessage } from './networkStatus'
+
+const MAX_IMAGE_DIMENSION = 1280
+const JPEG_QUALITY = 0.72
+const speciesIdCache = new Map()
 
 /**
- * Uploads an image to the 'reports' bucket in Supabase Storage.
+ * Resize and compress a local image before upload (much faster on slow networks).
  */
-export async function uploadReportImage(uri) {
-  const { data: authData } = await supabase.auth.getUser()
-  const user = authData?.user
-  if (!user) throw new Error('No user session found')
+export async function compressReportImage(uri) {
+  if (!uri) throw new Error('Image uri is required')
 
-  const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg'
-  const fileName = `${user.id}/${Date.now()}.${fileExt}`
+  const result = await manipulateAsync(
+    uri,
+    [{ resize: { width: MAX_IMAGE_DIMENSION } }],
+    { compress: JPEG_QUALITY, format: SaveFormat.JPEG }
+  )
 
-  const response = await fetch(uri)
+  return result.uri
+}
+
+/**
+ * Uploads a compressed image to the reports bucket.
+ */
+export async function uploadReportImage(uri, userId) {
+  if (!userId) throw new Error('No user session found')
+
+  const compressedUri = await compressReportImage(uri)
+  const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`
+
+  const response = await fetch(compressedUri)
   const arrayBuffer = await response.arrayBuffer()
 
   const { error: uploadError } = await supabase.storage
     .from('reports')
     .upload(fileName, arrayBuffer, {
-      contentType: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+      contentType: 'image/jpeg',
       upsert: false,
     })
 
@@ -31,8 +50,16 @@ export async function uploadReportImage(uri) {
   return publicUrl
 }
 
+async function uploadReportImagesParallel(uris, userId) {
+  if (!uris.length) return []
+  return Promise.all(uris.map((uri) => uploadReportImage(uri, userId)))
+}
+
 async function resolveSpeciesId(speciesName) {
   if (!speciesName?.trim()) return null
+
+  const key = speciesName.trim().toLowerCase()
+  if (speciesIdCache.has(key)) return speciesIdCache.get(key)
 
   const { data, error } = await supabase
     .from('mangrove_species')
@@ -45,21 +72,21 @@ async function resolveSpeciesId(speciesName) {
     return null
   }
 
-  return data?.id ?? null
+  const id = data?.id ?? null
+  speciesIdCache.set(key, id)
+  return id
 }
 
 /**
  * Submits a mangrove report to Supabase.
+ * @param {object} reportData
+ * @param {(step: string) => void} [reportData.onProgress] - optional progress callback
  */
 export async function submitReport(reportData = {}) {
-  const { data: { user }, error: authError } = await supabase.auth.getUser()
-  if (authError || !user) {
-    throw new Error('User must be signed in to submit a report.')
-  }
-
   const {
     imageUri,
     imageUrl = null,
+    additionalImageUris = [],
     latitude,
     longitude,
     species = null,
@@ -73,73 +100,105 @@ export async function submitReport(reportData = {}) {
     subregion = null,
     formattedAddress = null,
     additionalImageUrls = [],
+    onProgress,
   } = reportData
 
-  if (latitude == null || longitude == null) {
-    throw new Error('latitude and longitude are required.')
-  }
+  try {
+    onProgress?.('Checking connection…')
+    await assertNetworkAvailable()
 
-  if (!imageUri && !imageUrl) {
-    throw new Error('Either imageUri or imageUrl must be provided.')
-  }
-
-  if (healthStatus && !['healthy', 'unhealthy'].includes(healthStatus)) {
-    throw new Error(`Invalid healthStatus "${healthStatus}". Must be "healthy" or "unhealthy".`)
-  }
-
-  let finalImageUrl = imageUrl
-  if (!finalImageUrl && imageUri) {
-    finalImageUrl = await uploadReportImage(imageUri)
-  }
-
-  const speciesId = await resolveSpeciesId(species)
-  const locationText = buildLocationText({ purok, street, barangay, city, subregion, formattedAddress })
-
-  const resolvedStatus = reportStatus
-    || (healthStatus === 'healthy' ? 'recorded' : 'pending')
-
-  if (!['pending', 'recorded'].includes(resolvedStatus)) {
-    throw new Error(`Invalid reportStatus "${resolvedStatus}". Volunteers may only use "pending" or "recorded".`)
-  }
-
-  const { data: reportRows, error: insertError } = await supabase
-    .from('reports')
-    .insert([
-      {
-        user_id: user.id,
-        species_id: speciesId,
-        image_url: finalImageUrl,
-        health_status: healthStatus,
-        latitude: Number(latitude),
-        longitude: Number(longitude),
-        location_text: locationText,
-        field_notes: notes,
-        status: resolvedStatus,
-      },
-    ])
-    .select('id')
-    .single()
-
-  if (insertError) throw insertError
-
-  const reportId = reportRows.id
-
-  if (additionalImageUrls.length > 0) {
-    const attachments = additionalImageUrls.map((url) => ({
-      report_id: reportId,
-      image_url: url,
-    }))
-
-    const { error: attachmentError } = await supabase
-      .from('report_attachments')
-      .insert(attachments)
-
-    if (attachmentError) {
-      console.warn('Report attachments failed:', attachmentError.message)
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      throw new Error('You must be signed in to submit a report.')
     }
-  }
 
-  return reportId
+    if (latitude == null || longitude == null) {
+      throw new Error('Latitude and longitude are required.')
+    }
+
+    if (!imageUri && !imageUrl) {
+      throw new Error('A report photo is required.')
+    }
+
+    if (healthStatus && !['healthy', 'unhealthy'].includes(healthStatus)) {
+      throw new Error(`Invalid health status "${healthStatus}".`)
+    }
+
+    const extraUris = additionalImageUris.filter(Boolean)
+    const preUploadedExtras = additionalImageUrls.filter(Boolean)
+
+    onProgress?.('Preparing photos…')
+
+    // Upload main photo, extra photos, and species lookup in parallel
+    onProgress?.(
+      extraUris.length > 0
+        ? `Uploading ${1 + extraUris.length} photo${1 + extraUris.length === 1 ? '' : 's'}…`
+        : 'Uploading photo…'
+    )
+
+    const [finalImageUrl, speciesId, uploadedExtraUrls] = await Promise.all([
+      imageUrl
+        ? Promise.resolve(imageUrl)
+        : uploadReportImage(imageUri, user.id),
+      resolveSpeciesId(species),
+      extraUris.length > 0
+        ? uploadReportImagesParallel(extraUris, user.id)
+        : Promise.resolve([]),
+    ])
+
+    const allAdditionalUrls = [...preUploadedExtras, ...uploadedExtraUrls]
+    const locationText = buildLocationText({ purok, street, barangay, city, subregion, formattedAddress })
+
+    const resolvedStatus = reportStatus
+      || (healthStatus === 'healthy' ? 'recorded' : 'pending')
+
+    if (!['pending', 'recorded'].includes(resolvedStatus)) {
+      throw new Error(`Invalid report status "${resolvedStatus}".`)
+    }
+
+    onProgress?.('Saving report…')
+
+    const { data: reportRows, error: insertError } = await supabase
+      .from('reports')
+      .insert([
+        {
+          user_id: user.id,
+          species_id: speciesId,
+          image_url: finalImageUrl,
+          health_status: healthStatus,
+          latitude: Number(latitude),
+          longitude: Number(longitude),
+          location_text: locationText,
+          field_notes: notes,
+          status: resolvedStatus,
+        },
+      ])
+      .select('id')
+      .single()
+
+    if (insertError) throw insertError
+
+    const reportId = reportRows.id
+
+    if (allAdditionalUrls.length > 0) {
+      const attachments = allAdditionalUrls.map((url) => ({
+        report_id: reportId,
+        image_url: url,
+      }))
+
+      const { error: attachmentError } = await supabase
+        .from('report_attachments')
+        .insert(attachments)
+
+      if (attachmentError) {
+        console.warn('Report attachments failed:', attachmentError.message)
+      }
+    }
+
+    return reportId
+  } catch (error) {
+    throw new Error(toSubmissionErrorMessage(error))
+  }
 }
 
 /**

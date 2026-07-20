@@ -4,9 +4,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import * as ImagePicker from 'expo-image-picker'
-import { supabase } from '../supabaseClient'
-import { submitReport, uploadReportImage } from './utils/submitReport'
+import { submitReport } from './utils/submitReport'
+import { isNetworkAvailable } from './utils/networkStatus'
 import { formatLocationAddress } from './utils/shared/locationFormat'
+import LoadingOverlay from './components/LoadingOverlay'
 import {
   useFonts,
   Montserrat_400Regular,
@@ -20,6 +21,7 @@ export default function HealthResult() {
 
   const [fieldNotes, setFieldNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitProgress, setSubmitProgress] = useState('')
   const [additionalImages, setAdditionalImages] = useState([])
   const insets = useSafeAreaInsets()
 
@@ -78,21 +80,21 @@ export default function HealthResult() {
       return
     }
 
+    const online = await isNetworkAvailable()
+    if (!online) {
+      Alert.alert(
+        'No Internet',
+        'You need an internet connection to submit a report. Please check your Wi‑Fi or mobile data and try again.'
+      )
+      return
+    }
+
     setIsSubmitting(true)
+    setSubmitProgress('Starting…')
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        throw new Error('User session not found. Please sign in again.')
-      }
-
-      const uploadedUrls = []
-      for (const uri of additionalImages) {
-        const url = await uploadReportImage(uri)
-        uploadedUrls.push(url)
-      }
-
       await submitReport({
         imageUri: params.imageUri || null,
+        additionalImageUris: additionalImages,
         latitude: params.latitude,
         longitude: params.longitude,
         species: params.speciesName || null,
@@ -105,7 +107,7 @@ export default function HealthResult() {
         city: params.city || null,
         subregion: params.subregion || null,
         formattedAddress: params.formattedAddress || null,
-        additionalImageUrls: uploadedUrls,
+        onProgress: setSubmitProgress,
       })
 
       if (isHealthy) {
@@ -125,11 +127,13 @@ export default function HealthResult() {
       Alert.alert('Submission Failed', error.message || 'An unexpected error occurred. Please try again.')
     } finally {
       setIsSubmitting(false)
+      setSubmitProgress('')
     }
   }
 
   return (
     <View style={styles.container}>
+      <LoadingOverlay visible={isSubmitting} message={submitProgress} />
       <ScrollView contentContainerStyle={styles.content}>
 
         {/* Captured Image Preview */}
@@ -267,7 +271,7 @@ export default function HealthResult() {
           )}
           <Text style={styles.primaryButtonText}>
             {isSubmitting
-              ? (isHealthy ? 'Recording...' : 'Submitting...')
+              ? submitProgress || (isHealthy ? 'Recording…' : 'Submitting…')
               : (isHealthy ? 'Record Status' : 'Submit Report')}
           </Text>
         </TouchableOpacity>
